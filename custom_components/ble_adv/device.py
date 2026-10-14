@@ -66,6 +66,13 @@ class BleAdvDeviceEntity(RestoreEntity):
         self._attr_translation_key: str = ent_type
         self._attr_available = self._device.available
 
+    def set_available(self, available: bool) -> None:
+        """Follow the device availability."""
+        if self._attr_available != available:
+            self._attr_available = available
+            if self.hass is not None:
+                self.async_write_ha_state()
+
 
 class BleAdvEvent(BleAdvDeviceEntity, EventEntity):
     """Base Event Entity."""
@@ -272,6 +279,9 @@ class BleAdvDevice(BleAdvBaseDevice):
         for ent in self._entities:
             if ent.set_state_attribute(ATTR_AVAILABLE, self.available):
                 ent.async_write_ha_state()
+        for dev_ent in (self._event_entity, self._silent_switch_entity):
+            if dev_ent is not None:
+                dev_ent.set_available(self.available)
 
     def set_event_entity(self, ent: BleAdvEvent) -> None:
         """Set the Event Entity."""

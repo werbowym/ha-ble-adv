@@ -81,10 +81,16 @@ async def test_device(hass: HomeAssistant, coord: BleAdvCoordinator) -> None:
     assert not device.available
     ent0.set_state_attribute(ATTR_AVAILABLE, True)
     assert ent0.available
+    silent_ent.set_available(True)
+    silent_ent.async_write_ha_state.reset_mock()
+    event_ent.set_available(True)
+    event_ent.async_write_ha_state.reset_mock()
     device.update_availability()
     ent0.async_write_ha_state.assert_called_once()
     ent0.async_write_ha_state.reset_mock()
     assert not ent0.available
+    assert not silent_ent.available
+    assert not event_ent.available
     on_cmd = BleAdvEntAttr([ATTR_ON], {ATTR_ON: True}, "ent_type", 0)
     await device.apply_change(on_cmd)
     coord.advertise.assert_called_once_with("my_adapter", "my_device", BleAdvQueueItem(0x10, 1, 100, 20, [adv.to_raw()], 2))
@@ -181,3 +187,20 @@ async def test_entity(device: _Device) -> None:
     ent.set_state_attribute(ATTR_IS_ON, True)
     await ent.handle_change([ATTR_ON], ent.get_attrs())
     device.assert_apply_change(ent, [ATTR_ON])
+
+
+async def test_device_entities_follow_device_availability(hass: HomeAssistant, coord: BleAdvCoordinator) -> None:
+    """Silent switch and event created while the adapter is down become available once it is up."""
+    coord.codecs = {"my_codec/sub": mock.MagicMock()}
+    device = BleAdvDevice(hass, "my_device", "device", "my_codec/sub", ["my_adapter"], 1, 20, 100, BleAdvConfig(0xABCDEF, 1), coord)
+    silent_ent = BleAdvSwitch(device, SILENT_SWITCH_TYPE)
+    silent_ent.async_write_ha_state = mock.MagicMock()
+    event_ent = BleAdvEvent(device)
+    event_ent.async_write_ha_state = mock.MagicMock()
+    assert not device.available
+    assert not silent_ent.available
+    assert not event_ent.available
+    with mock.patch.object(BleAdvDevice, "available", new_callable=mock.PropertyMock, return_value=True):
+        device.update_availability()
+    assert silent_ent.available
+    assert event_ent.available
